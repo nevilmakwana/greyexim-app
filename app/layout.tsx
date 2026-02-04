@@ -1,5 +1,6 @@
 import "./globals.css";
 import Providers from "./Providers";
+import { Suspense } from "react";
 
 import Header from "app/components/Header";
 import Footer from "app/components/Footer";
@@ -36,7 +37,9 @@ export default function RootLayout({
           <Footer />
 
           {/* MOBILE NAV */}
-          <MobileBottomMenu />
+          <Suspense fallback={null}>
+            <MobileBottomMenu />
+          </Suspense>
 
           {/* CART DRAWER */}
           <CartDrawer />
