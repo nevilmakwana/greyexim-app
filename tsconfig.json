@@ -1,0 +1,54 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+
+    /* JavaScript Support */
+    "allowJs": true,
+    "skipLibCheck": true,
+
+    /* Type Checking */
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+
+    /* Module Resolution */
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+
+    /* JSX */
+    "jsx": "react-jsx",
+
+    /* Performance */
+    "incremental": true,
+
+    /* ⭐ REQUIRED FOR PATH ALIAS */
+    "baseUrl": ".",
+
+    /* ⭐ CORRECT PATH ALIAS FOR APP ROUTER */
+    "paths": {
+      "@/*": ["./app/*"]
+    },
+
+    /* Next.js Plugin */
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+
+  "exclude": ["node_modules"]
+}

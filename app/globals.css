@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* ===============================
+   ANIMATIONS
+================================ */
+
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.25s ease-out;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.25s ease-out;
+}
+
+/* ===============================
+   THEME VARIABLES
+================================ */
+
+:root {
+  /* ☀️ Light Mode */
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* 🌙 Dark Mode */
+.dark {
+  --background: #000000;
+  --foreground: #ededed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+/* ===============================
+   BASE STYLES
+================================ */
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%; /* 🔥 Prevent iOS text zoom */
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  height: 100%;
+  margin: 0;
+  overscroll-behavior-y: contain;
+
+  /* Smooth theme transition */
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ===============================
+   iOS INPUT ZOOM FIX (CRITICAL)
+================================ */
+
+/* 🔥 Prevent Safari zoom on input focus */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+/* ===============================
+   GOOGLE TRANSLATE – FULL REMOVAL
+================================ */
+
+/* Hide Google translate top banner */
+.goog-te-banner-frame {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+
+/* Prevent body push-down */
+body {
+  top: 0px !important;
+  position: static !important;
+  margin-top: 0 !important;
+}
+
+/* Reset HTML adjustments */
+html {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Hide translate widgets & tooltips */
+.goog-te-gadget,
+.goog-tooltip {
+  display: none !important;
+}
+
+.goog-text-highlight {
+  background: none !important;
+  box-shadow: none !important;
+}
+
+/* Hide skiptranslate wrapper */
+body > .skiptranslate {
+  display: none !important;
+}
+
+/* ===============================
+   SCROLLBAR HIDING (MOBILE SAFE)
+================================ */
+
+/* Hide scrollbar but allow scrolling */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE & Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* ===============================
+   MOBILE SAFETY
+================================ */
+
+/* Prevent layout shift during keyboard open */
+body,
+html {
+  overscroll-behavior: none;
+}
