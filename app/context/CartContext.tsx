@@ -10,6 +10,8 @@ import {
   ReactNode,
 } from "react";
 
+const CART_STORAGE_KEY = "greyexim_cart";
+
 /* =====================
    TYPES
 ===================== */
@@ -54,6 +56,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   /* ---------- 1. Load cart on Mount ---------- */
   useEffect(() => {
@@ -61,7 +64,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     const loadCart = () => {
       try {
-        const saved = localStorage.getItem("greyexim_cart");
+        const saved = localStorage.getItem(CART_STORAGE_KEY);
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
@@ -74,10 +77,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
 
     loadCart();
+    setHydrated(true);
 
     // ✅ Premium Feature: Sync across tabs
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "greyexim_cart") {
+      if (e.key === CART_STORAGE_KEY) {
         loadCart();
       }
     };
@@ -89,8 +93,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   /* ---------- 2. Save cart on Change ---------- */
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem("greyexim_cart", JSON.stringify(cart));
-  }, [cart]);
+    // Guard against React StrictMode double-mount in dev: don't overwrite storage
+    // until we've attempted to hydrate from storage once.
+    if (!hydrated) return;
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  }, [cart, hydrated]);
 
   /* ---------- 3. Helper Functions ---------- */
   const toggleCart = useCallback(() => setIsCartOpen((prev) => !prev), []);
