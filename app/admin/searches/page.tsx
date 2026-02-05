@@ -85,6 +85,28 @@ export default function AdminSearchesPage() {
     return d.toLocaleString();
   };
 
+  const exportCsv = async () => {
+    try {
+      const res = await fetch(`/api/admin/searches/export?days=${days}`);
+      if (!res.ok) {
+        setToast("Export failed");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `search_terms_last_${days}_days.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToast("Exported");
+    } catch {
+      setToast("Export failed");
+    } finally {
+      setTimeout(() => setToast(null), 2000);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -122,12 +144,20 @@ export default function AdminSearchesPage() {
             <option value={365}>Last 365 days</option>
           </select>
 
-          <button
-            onClick={load}
-            className="ml-auto bg-black text-white px-4 py-2 rounded-full text-[10px] uppercase tracking-widest font-black"
-          >
-            Refresh
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={exportCsv}
+              className="bg-white border border-gray-200 text-gray-900 px-4 py-2 rounded-full text-[10px] uppercase tracking-widest font-black"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={load}
+              className="bg-black text-white px-4 py-2 rounded-full text-[10px] uppercase tracking-widest font-black"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
@@ -144,7 +174,7 @@ export default function AdminSearchesPage() {
 
           {loading ? (
             <div className="text-xs text-gray-400 font-semibold py-10 text-center">
-              Loading…
+              Loading...
             </div>
           ) : filteredTop.length === 0 ? (
             <div className="text-xs text-gray-400 font-semibold py-10 text-center">
@@ -183,7 +213,7 @@ export default function AdminSearchesPage() {
 
           {loading ? (
             <div className="text-xs text-gray-400 font-semibold py-10 text-center">
-              Loading…
+              Loading...
             </div>
           ) : filteredRecent.length === 0 ? (
             <div className="text-xs text-gray-400 font-semibold py-10 text-center">
@@ -199,7 +229,7 @@ export default function AdminSearchesPage() {
                         {row.term}
                       </div>
                       <div className="text-[10px] uppercase tracking-widest text-gray-400 font-black mt-1">
-                        {row.source || "unknown"} • {fmtTime(row.createdAt)}
+                        {row.source || "unknown"} - {fmtTime(row.createdAt)}
                       </div>
                       {row.userEmail && (
                         <div className="text-[11px] text-gray-600 font-semibold mt-1 break-all">
@@ -226,4 +256,3 @@ export default function AdminSearchesPage() {
     </div>
   );
 }
-
