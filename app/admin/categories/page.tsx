@@ -4,14 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 export default function CategoryListPage() {
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchCategories = async () => {
-    const res = await fetch("/api/categories");
-    const data = await res.json();
-    setCategories(data);
-    setLoading(false);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/categories", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data)) {
+        setCategories([]);
+        return;
+      }
+      setCategories(data);
+    } catch {
+      setCategories([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchCategories(); }, []);
@@ -46,17 +56,40 @@ export default function CategoryListPage() {
               </tr>
             </thead>
             <tbody>
-              {categories.map((cat: any) => (
-                <tr key={cat._id} className="border-b hover:bg-gray-50">
-                  <td className="p-4">
-                    <img src={cat.image || "/no-image.png"} className="w-12 h-12 rounded object-cover" />
-                  </td>
-                  <td className="p-4 font-medium text-black">{cat.name}</td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => handleDelete(cat._id)} className="text-red-600 font-bold">Delete</button>
+              {loading ? (
+                <tr>
+                  <td colSpan={3} className="p-8 text-center text-gray-400 font-semibold">
+                    Loading...
                   </td>
                 </tr>
-              ))}
+              ) : categories.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="p-10 text-center text-gray-400 font-semibold">
+                    No categories yet.
+                  </td>
+                </tr>
+              ) : (
+                categories.map((cat: any) => (
+                  <tr key={cat._id} className="border-b hover:bg-gray-50">
+                    <td className="p-4">
+                      <img
+                        src={cat.image || "/no-image.png"}
+                        alt={cat.name || "Category"}
+                        className="w-12 h-12 rounded object-cover"
+                      />
+                    </td>
+                    <td className="p-4 font-medium text-black">{cat.name}</td>
+                    <td className="p-4 text-right">
+                      <button
+                        onClick={() => handleDelete(cat._id)}
+                        className="text-red-600 font-bold"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
