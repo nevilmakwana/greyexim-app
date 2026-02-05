@@ -10,7 +10,7 @@ export default function MobileBottomNav() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { cartCount, toggleCart } = useCart();
+  const { cartCount, setIsCartOpen } = useCart();
   const { data: session } = useSession();
 
   const [isSearching, setIsSearching] = useState(false);
@@ -76,6 +76,12 @@ export default function MobileBottomNav() {
 
   const isActive = (path?: string) =>
     path && (pathname === path || pathname.startsWith(path + "/"));
+
+  const goToCart = () => {
+    // Close drawer state (in case it was open from a previous session) and go to cart page.
+    setIsCartOpen(false);
+    router.push("/cart");
+  };
 
   return (
     <div className="md:hidden fixed bottom-4 left-4 right-4 z-[999999]">
@@ -149,20 +155,20 @@ export default function MobileBottomNav() {
               />
             </Link>
 
-            <Link
-              href={session ? "/profile" : "/login"}
-              className="w-14 flex flex-col items-center"
-            >
-              <UserIcon className={isActive("/profile") ? "text-black" : "text-gray-400"} />
-            </Link>
+              <Link
+                href={session ? "/profile" : "/login"}
+                className="w-14 flex flex-col items-center"
+              >
+                <UserIcon className={isActive("/profile") ? "text-black" : "text-gray-400"} />
+              </Link>
 
-            <button onClick={toggleCart} className="w-14 flex flex-col items-center">
-              <BagIcon count={cartCount} />
-            </button>
-          </div>
-        )}
+              <button onClick={goToCart} className="w-14 flex flex-col items-center">
+                <BagIcon count={cartCount} className={isActive("/cart") ? "text-black" : "text-gray-400"} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
   );
 }
 
@@ -201,9 +207,9 @@ const UserIcon = ({ className = "" }) => (
   </svg>
 );
 
-const BagIcon = ({ count }: { count: number }) => (
+const BagIcon = ({ count, className = "" }: { count: number; className?: string }) => (
   <div className="relative">
-    <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <svg className={className} width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
       <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
       <line x1="3" y1="6" x2="21" y2="6" />
       <path d="M16 10a4 4 0 0 1-8 0" />

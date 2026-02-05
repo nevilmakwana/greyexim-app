@@ -5,7 +5,6 @@ import { Suspense } from "react";
 import Header from "app/components/Header";
 import Footer from "app/components/Footer";
 import ClientMobileBottomNav from "app/components/ClientMobileBottomNav";
-import CartDrawer from "app/components/CartDrawer";
 
 export const metadata = {
   title: "GreyExim",
@@ -40,9 +39,6 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <ClientMobileBottomNav />
           </Suspense>
-
-          {/* CART DRAWER */}
-          <CartDrawer />
         </Providers>
       </body>
     </html>
