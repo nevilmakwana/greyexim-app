@@ -236,7 +236,26 @@ export default function AddProductPage() {
 
                     <div className="grid grid-cols-2 gap-2 mt-4">
                         {formData.images.map((img, i) => (
-                            <img key={i} src={img} alt="Preview" className="w-full h-24 object-cover rounded-lg border border-gray-200" />
+                            <div key={img || i} className="relative">
+                              <img
+                                src={img}
+                                alt={`Preview ${i + 1}`}
+                                className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    images: prev.images.filter((_, idx) => idx !== i),
+                                  }))
+                                }
+                                aria-label="Remove image"
+                                className="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black transition"
+                              >
+                                <span className="text-lg leading-none -mt-[1px]">×</span>
+                              </button>
+                            </div>
                         ))}
                     </div>
                 </div>
