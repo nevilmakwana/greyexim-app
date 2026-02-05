@@ -1,10 +1,12 @@
 "use client";
 
-import { useCart } from "app/context/CartContext";
 import Link from "next/link";
 
+import { useCart } from "app/context/CartContext";
+
 export default function CartPage() {
-  const { cart, removeFromCart, cartTotal } = useCart();
+  const { cart, cartCount, increaseQty, decreaseQty, removeFromCart, cartTotal } = useCart();
+  const rupee = "\u20B9";
 
   if (cart.length === 0) {
     return (
@@ -18,42 +20,98 @@ export default function CartPage() {
   }
 
   return (
-    // ✅ FIX: 'pb-32' (Padding Bottom) add kiya taaki content menu ke piche na jaye
     <div className="min-h-screen bg-white pt-6 px-4 pb-32 md:pt-20 md:px-20">
-      
-      <h1 className="text-3xl font-black uppercase italic mb-8">
-        Shopping Bag ({cart.length})
-      </h1>
+      <h1 className="text-3xl font-black uppercase italic mb-8">Shopping Bag ({cartCount})</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        
         {/* Cart Items */}
         <div className="md:col-span-2 space-y-6">
-          {cart.map((item) => (
-            <div key={item._id} className="flex gap-4 border-b border-gray-100 pb-6">
-              <div className="w-24 h-32 bg-gray-50 rounded-xl overflow-hidden relative">
-                <img src={item.image} alt={item.designName} className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-grow flex flex-col justify-between">
-                <div>
-                  <h3 className="font-black uppercase text-sm">{item.designName}</h3>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{item.designCode}</p>
+          {cart.map((item) => {
+            const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+
+            return (
+              <div key={item._id} className="flex gap-4 border-b border-gray-100 pb-6">
+                <div className="w-24 h-32 bg-gray-50 rounded-xl overflow-hidden relative flex-shrink-0">
+                  <img src={item.image} alt={item.designName} className="w-full h-full object-cover" />
                 </div>
-                <div className="flex justify-between items-end">
-                  <span className="font-bold text-sm">₹{item.price}</span>
-                  <button onClick={() => removeFromCart(item._id)} className="text-red-500 text-[10px] font-black uppercase">Remove</button>
+
+                <div className="flex-grow">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-black uppercase text-sm">{item.designName}</h3>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{item.designCode}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeFromCart(item._id)}
+                      className="text-red-500 text-[10px] font-black uppercase"
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex items-end justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="inline-flex items-center rounded-full border border-gray-200 bg-white shadow-sm overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => decreaseQty(item._id)}
+                          aria-label={`Decrease quantity of ${item.designName}`}
+                          className="w-9 h-9 grid place-items-center text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                        >
+                          -
+                        </button>
+                        <span className="w-10 text-center text-sm font-black">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => increaseQty(item._id)}
+                          aria-label={`Increase quantity of ${item.designName}`}
+                          className="w-9 h-9 grid place-items-center text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <span className="text-[11px] text-gray-400 font-bold uppercase tracking-widest">
+                        {rupee}
+                        {item.price} each
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-sm font-black">
+                        {rupee}
+                        {lineTotal}
+                      </div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Item total</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Order Summary */}
         <div className="bg-gray-50 p-6 rounded-[30px] h-fit border border-gray-100">
           <h3 className="font-black uppercase text-sm mb-4">Order Summary</h3>
-          <div className="flex justify-between mb-4 text-sm"><span className="text-gray-500">Total</span><span className="font-black">₹{cartTotal}</span></div>
-          
-          <Link href="/checkout">
+
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Items</span>
+              <span className="font-black">{cartCount}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Total</span>
+              <span className="font-black">
+                {rupee}
+                {cartTotal}
+              </span>
+            </div>
+          </div>
+
+          <Link href="/checkout" className="block mt-5">
             <button className="w-full bg-blue-600 text-white py-4 rounded-full font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700 active:scale-95 transition-all">
               Proceed to Checkout
             </button>
@@ -63,3 +121,4 @@ export default function CartPage() {
     </div>
   );
 }
+
