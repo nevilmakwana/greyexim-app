@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Fuse from "fuse.js";
 
 /* ✅ FIXED PRODUCT INTERFACE (MATCHES API) */
 interface Product {
@@ -17,6 +18,7 @@ interface Product {
 
 function ShopContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const initialSearch = searchParams.get("q") || "";
   const initialCat = searchParams.get("cat") || "All";
@@ -27,6 +29,8 @@ function ShopContent() {
   const [loading, setLoading] = useState(true);
 
   const categories = ["Silk", "Cotton", "Wool", "Polyester", "Christmas Edition"];
+  const RECENT_KEY = "greyexim_recent_searches";
+  const TREND_KEY = "greyexim_search_counts";
 
   /* ✅ FETCH PRODUCTS */
  useEffect(() => {
@@ -49,19 +53,61 @@ function ShopContent() {
     setLocalSearch(searchParams.get("q") || "");
   }, [searchParams]);
 
-  /* ✅ SAFE FILTER LOGIC */
-  const filteredProducts = products.filter((p) => {
-    const matchesCategory =
-      selectedCategory === "All" ||
-      p.category?.toLowerCase() === selectedCategory.toLowerCase();
+  const fuse = useMemo(() => {
+    return new Fuse(products, {
+      keys: ["designName", "designCode", "category"],
+      threshold: 0.35,
+      ignoreLocation: true,
+    });
+  }, [products]);
 
-    const matchesSearch = localSearch
-      ? p.designName.toLowerCase().includes(localSearch.toLowerCase()) ||
-        p.designCode.toLowerCase().includes(localSearch.toLowerCase())
-      : true;
+  const getPrice = (p: Product) => p.price ?? p.variants?.[0]?.price ?? 0;
 
-    return matchesCategory && matchesSearch;
-  });
+  const filteredProducts = useMemo(() => {
+    let list = products;
+
+    if (localSearch) {
+      const hits = fuse.search(localSearch);
+      list = hits.map((h) => h.item);
+    }
+
+    if (selectedCategory !== "All") {
+      list = list.filter(
+        (p) => p.category?.toLowerCase() === selectedCategory.toLowerCase()
+      );
+    }
+
+    return list;
+  }, [products, fuse, localSearch, selectedCategory]);
+
+  const updateSearchStats = (term: string) => {
+    if (!term) return;
+    const clean = term.trim().toLowerCase();
+    if (!clean) return;
+
+    const recentRaw = localStorage.getItem(RECENT_KEY);
+    const recent = recentRaw ? JSON.parse(recentRaw) : [];
+    const nextRecent = Array.isArray(recent)
+      ? [clean, ...recent.filter((t: string) => t !== clean)].slice(0, 6)
+      : [clean];
+    localStorage.setItem(RECENT_KEY, JSON.stringify(nextRecent));
+
+    const trendRaw = localStorage.getItem(TREND_KEY);
+    const trend = trendRaw ? JSON.parse(trendRaw) : {};
+    const nextTrend = typeof trend === "object" && trend ? trend : {};
+    nextTrend[clean] = (nextTrend[clean] || 0) + 1;
+    localStorage.setItem(TREND_KEY, JSON.stringify(nextTrend));
+  };
+
+  const submitSearch = (value?: string) => {
+    const term = (value ?? localSearch).trim();
+    setLocalSearch(term);
+    updateSearchStats(term);
+    const params = new URLSearchParams();
+    if (term) params.set("q", term);
+    if (selectedCategory && selectedCategory !== "All") params.set("cat", selectedCategory);
+    router.push(`/shop?${params.toString()}`);
+  };
 
   return (
     <main className="bg-white min-h-screen pb-44 font-sans text-gray-900">
@@ -75,6 +121,21 @@ function ShopContent() {
           <h1 className="text-4xl font-black uppercase italic tracking-tighter">
             Shop
           </h1>
+
+          <div className="mt-5">
+            <div className="relative">
+              <input
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitSearch();
+                }}
+                placeholder="Search designs, codes, categories..."
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+
+          </div>
 
           <div
             className="
@@ -148,6 +209,26 @@ function ShopContent() {
           Collection
         </h1>
 
+        <div className="flex gap-4 items-center mb-10">
+          <div className="flex-1 relative">
+            <input
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitSearch();
+              }}
+              placeholder="Search designs, codes, categories..."
+              className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-5 py-4 text-sm font-semibold outline-none focus:ring-2 focus:ring-black"
+            />
+          </div>
+          <button
+            onClick={() => submitSearch()}
+            className="bg-black text-white px-6 py-4 rounded-2xl font-black uppercase text-xs"
+          >
+            Search
+          </button>
+        </div>
+
         <div className="grid grid-cols-4 gap-12">
           {filteredProducts.map((p) => (
             <Link href={`/products/${p._id}`} key={p._id} className="group">
@@ -162,7 +243,7 @@ function ShopContent() {
                 {p.designName}
               </h3>
               <p className="text-blue-600 font-black italic">
-                ₹{p.price ?? p.variants?.[0]?.price ?? "N/A"}
+                ₹{getPrice(p) || "N/A"}
               </p>
             </Link>
           ))}

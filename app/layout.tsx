@@ -4,7 +4,7 @@ import { Suspense } from "react";
 
 import Header from "app/components/Header";
 import Footer from "app/components/Footer";
-import MobileBottomMenu from "app/components/MobileBottomNav";
+import ClientMobileBottomNav from "app/components/ClientMobileBottomNav";
 import CartDrawer from "app/components/CartDrawer";
 
 export const metadata = {
@@ -38,7 +38,7 @@ export default function RootLayout({
 
           {/* MOBILE NAV */}
           <Suspense fallback={null}>
-            <MobileBottomMenu />
+            <ClientMobileBottomNav />
           </Suspense>
 
           {/* CART DRAWER */}

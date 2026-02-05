@@ -7,6 +7,10 @@ const WishlistSchema = new mongoose.Schema({
     required: true 
   },
   userEmail: { type: String, required: true },
+  userPhone: { type: String },
+  marketingOptIn: { type: Boolean, default: false },
+  leadStatus: { type: String, default: "New" },
+  leadNotes: { type: String, default: "" },
   productId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Product', 

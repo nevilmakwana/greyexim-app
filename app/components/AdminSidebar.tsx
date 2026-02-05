@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,6 +8,7 @@ const menuItems = [
   { name: "Add Product", href: "/admin/add", icon: "✨" },
   { name: "Inventory", href: "/admin/manage", icon: "📦" },
   { name: "Orders", href: "/admin/orders", icon: "🚀" },
+  { name: "Wishlist", href: "/admin/wishlist", icon: "❤" },
   { name: "Categories", href: "/admin/categories", icon: "📁" },
   { name: "Hero Slides", href: "/admin/hero", icon: "🖼️" },
 ];
