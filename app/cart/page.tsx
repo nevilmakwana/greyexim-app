@@ -19,11 +19,11 @@ export default function CartPage() {
 
     const code = appliedCode.trim().toUpperCase();
     if (code === "GREY10") {
-      // 10% off (cap ₹500)
+      // 10% off (cap 500)
       return Math.min(Math.round(cartTotal * 0.1), 500);
     }
     if (code === "WELCOME50") {
-      // Flat ₹50 off
+      // Flat 50 off
       return Math.min(50, cartTotal);
     }
     return 0;
@@ -31,7 +31,10 @@ export default function CartPage() {
 
   const shippingEst = useMemo(() => 0, []); // TODO: compute by country/weight/pincode later
   const taxEst = useMemo(() => 0, []); // TODO: compute by destination later
-  const estimatedTotal = useMemo(() => Math.max(cartTotal + shippingEst + taxEst - promoDiscount, 0), [cartTotal, promoDiscount, shippingEst, taxEst]);
+
+  const estimatedTotal = useMemo(() => {
+    return Math.max(cartTotal + shippingEst + taxEst - promoDiscount, 0);
+  }, [cartTotal, shippingEst, taxEst, promoDiscount]);
 
   // Delivery ETA (client-only to avoid SSR locale/date mismatches)
   const [etaRange, setEtaRange] = useState<string | null>(null);
@@ -43,9 +46,9 @@ export default function CartPage() {
       const max = new Date(now);
       max.setDate(now.getDate() + 7);
       const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-      setEtaRange(`${fmt.format(min)} – ${fmt.format(max)}`);
+      setEtaRange(`${fmt.format(min)} - ${fmt.format(max)}`);
     } catch {
-      setEtaRange("3–7 business days");
+      setEtaRange("3-7 business days");
     }
   }, []);
 
@@ -55,6 +58,7 @@ export default function CartPage() {
 
     if (code === "GREY10" || code === "WELCOME50") {
       setAppliedCode(code);
+      setPromoCode(code);
       setPromoMsg(`Applied ${code}`);
       return;
     }
@@ -170,14 +174,10 @@ export default function CartPage() {
                 {cartTotal}
               </span>
             </div>
-
             <div className="flex justify-between">
               <span className="text-gray-500">Shipping (est.)</span>
-              <span className="font-black">
-                {shippingEst === 0 ? "Free" : `${rupee}${shippingEst}`}
-              </span>
+              <span className="font-black">{shippingEst === 0 ? "Free" : `${rupee}${shippingEst}`}</span>
             </div>
-
             <div className="flex justify-between">
               <span className="text-gray-500">Tax (est.)</span>
               <span className="font-black">{taxEst === 0 ? "Included" : `${rupee}${taxEst}`}</span>
@@ -185,9 +185,7 @@ export default function CartPage() {
 
             {promoDiscount > 0 ? (
               <div className="flex justify-between">
-                <span className="text-gray-500">
-                  Discount{appliedCode ? ` (${appliedCode})` : ""}
-                </span>
+                <span className="text-gray-500">Discount{appliedCode ? ` (${appliedCode})` : ""}</span>
                 <span className="font-black text-green-700">
                   -{rupee}
                   {promoDiscount}
@@ -209,66 +207,80 @@ export default function CartPage() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Delivery ETA</p>
-                <p className="text-sm font-black text-gray-900">{etaRange ?? "3–7 business days"}</p>
+                <p className="text-sm font-black text-gray-900">{etaRange ?? "3-7 business days"}</p>
               </div>
               <span className="shrink-0 rounded-full bg-black text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                 Secure
               </span>
             </div>
-            <p className="mt-1 text-[10px] font-semibold text-gray-500">
-              Final delivery time updates after address at checkout.
-            </p>
+            <p className="mt-1 text-[10px] font-semibold text-gray-500">Final delivery time updates after address at checkout.</p>
           </div>
 
           {/* Promo code (collapsed) */}
-          <details className="mt-4 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <summary className="list-none cursor-pointer px-4 py-3 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Promo code</p>
-                <p className="text-xs font-black text-gray-900">
-                  {appliedCode ? `Applied: ${appliedCode}` : "Add a code (optional)"}
+          <details className="mt-4 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden group">
+            <summary className="list-none cursor-pointer px-5 py-4 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Promo code</p>
+                <p className="text-sm font-black text-gray-900 truncate">
+                  {appliedCode ? `${appliedCode} applied` : "Add a code (optional)"}
                 </p>
               </div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-700">Edit</span>
+              <div className="flex items-center gap-2">
+                {appliedCode ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleClearPromo();
+                    }}
+                    aria-label="Remove promo code"
+                    className="w-9 h-9 grid place-items-center rounded-full border border-gray-200 text-gray-600 hover:text-black hover:bg-gray-50 active:scale-[0.98] transition"
+                  >
+                    ×
+                  </button>
+                ) : null}
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-700 group-open:text-black">Edit</span>
+              </div>
             </summary>
 
-            <div className="px-4 pb-4 border-t border-gray-100">
-              <div className="pt-4 flex gap-2">
-                <input
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder="Enter code"
-                  className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-black focus:ring-2 focus:ring-black/10"
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyPromo}
-                  className="rounded-2xl bg-black text-white px-4 py-3 text-[11px] font-black uppercase tracking-widest hover:bg-gray-900 active:scale-[0.98] transition"
-                >
-                  Apply
-                </button>
-              </div>
-
-              {promoMsg ? (
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <p className={`text-[11px] font-semibold ${appliedCode ? "text-green-700" : "text-red-600"}`}>
-                    {promoMsg}
-                  </p>
-                  {appliedCode ? (
-                    <button
-                      type="button"
-                      onClick={handleClearPromo}
-                      className="text-[10px] font-black uppercase tracking-widest text-gray-700 hover:text-black"
-                    >
-                      Remove
-                    </button>
-                  ) : null}
+            <div className="px-5 pb-5 border-t border-gray-100">
+              <div className="pt-4">
+                <div className="relative">
+                  <input
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder="Enter promo code"
+                    className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 pr-24 text-sm font-semibold outline-none focus:border-black focus:ring-2 focus:ring-black/10"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyPromo}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl bg-black text-white px-4 py-2 text-[11px] font-black uppercase tracking-widest hover:bg-gray-900 active:scale-[0.98] transition"
+                  >
+                    Apply
+                  </button>
                 </div>
-              ) : (
-                <p className="mt-2 text-[10px] font-semibold text-gray-500">
-                  Try: <span className="font-black">GREY10</span> or <span className="font-black">WELCOME50</span>
-                </p>
-              )}
+
+                {promoMsg ? (
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className={`text-[11px] font-semibold ${appliedCode ? "text-green-700" : "text-red-600"}`}>{promoMsg}</p>
+                    {appliedCode ? (
+                      <button
+                        type="button"
+                        onClick={handleClearPromo}
+                        className="text-[10px] font-black uppercase tracking-widest text-gray-700 hover:text-black"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[10px] font-semibold text-gray-500">
+                    Try: <span className="font-black">GREY10</span> or <span className="font-black">WELCOME50</span>
+                  </p>
+                )}
+              </div>
             </div>
           </details>
 
@@ -282,3 +294,4 @@ export default function CartPage() {
     </div>
   );
 }
+
