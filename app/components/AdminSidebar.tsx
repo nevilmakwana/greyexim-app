@@ -9,6 +9,7 @@ const menuItems = [
   { name: "Inventory", href: "/admin/manage", icon: "📦" },
   { name: "Orders", href: "/admin/orders", icon: "🚀" },
   { name: "Wishlist", href: "/admin/wishlist", icon: "❤" },
+  { name: "Searches", href: "/admin/searches", icon: "🔎" },
   { name: "Categories", href: "/admin/categories", icon: "📁" },
   { name: "Hero Slides", href: "/admin/hero", icon: "🖼️" },
 ];

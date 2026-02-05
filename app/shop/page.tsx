@@ -103,6 +103,14 @@ function ShopContent() {
     const term = (value ?? localSearch).trim();
     setLocalSearch(term);
     updateSearchStats(term);
+    if (term) {
+      // Fire-and-forget analytics (doesn't block UX).
+      fetch("/api/search-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ term, source: "shop" }),
+      }).catch(() => {});
+    }
     const params = new URLSearchParams();
     if (term) params.set("q", term);
     if (selectedCategory && selectedCategory !== "All") params.set("cat", selectedCategory);

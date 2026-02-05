@@ -63,8 +63,17 @@ export default function MobileBottomNav() {
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
-    router.push(`/shop?q=${encodeURIComponent(searchQuery)}`);
+    const term = searchQuery.trim();
+    if (!term) return;
+
+    // Fire-and-forget analytics (doesn't block navigation).
+    fetch("/api/search-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ term, source: "mobile-nav" }),
+    }).catch(() => {});
+
+    router.push(`/shop?q=${encodeURIComponent(term)}`);
     setIsSearching(false);
   };
 
