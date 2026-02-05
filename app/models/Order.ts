@@ -2,18 +2,15 @@ import mongoose, { Schema, model, models } from "mongoose";
 
 const OrderSchema = new Schema(
   {
-    // User identification
-    user: { 
-      type: String, 
-      required: true, 
-      index: true // Searching fast karne ke liye profile page par
-    },
-    
+    // User identification (optional for guest checkout)
+    user: { type: String, index: true },
+    isGuest: { type: Boolean, default: false },
+
     // Customer Details
     customerName: { type: String, required: true },
-    email: { type: String, required: true },
+    email: { type: String, required: true, index: true },
     phone: { type: String, required: true },
-    
+
     // Shipping Address
     shippingAddress: {
       address: { type: String, required: true },
@@ -22,7 +19,6 @@ const OrderSchema = new Schema(
       country: { type: String, default: "India" },
     },
 
-    // Cart Items (Aapke checkout logic ke hisaab se)
     cartItems: [
       {
         product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
@@ -30,15 +26,27 @@ const OrderSchema = new Schema(
         designCode: { type: String, required: true },
         price: { type: Number, required: true },
         quantity: { type: Number, default: 1 },
-        image: { type: String },
+        image: { type: String, default: "" },
       },
     ],
 
+    // Pricing breakdown (smallest unit is NOT used here; keep rupees as numbers)
+    subtotalAmount: { type: Number, required: true },
+    shippingAmount: { type: Number, default: 0 },
+    taxAmount: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 },
+    promoCode: { type: String, default: "" },
     totalAmount: { type: Number, required: true },
-    paymentMethod: { type: String, default: "COD" },
+    currency: { type: String, default: "INR" },
 
-    // Manufacturing & Delivery Status
-    // Received -> Fabric Sourcing -> Printing -> Quality Check -> Shipped -> Delivered
+    // Payment
+    paymentMethod: { type: String, default: "COD" }, // COD | STRIPE
+    paymentStatus: { type: String, default: "unpaid" }, // unpaid | pending | paid | failed | refunded
+    paymentProvider: { type: String, default: "" }, // stripe
+    paymentId: { type: String, default: "" }, // payment_intent or provider reference
+    stripeSessionId: { type: String, default: "" },
+
+    // Fulfillment Status
     status: {
       type: String,
       default: "Received",
@@ -52,12 +60,11 @@ const OrderSchema = new Schema(
         "Cancelled",
       ],
     },
-    
-    trackingId: { type: String }, // Delivery partner ka ID
-    createdAt: { type: Date, default: Date.now },
+    trackingId: { type: String, default: "" },
   },
   { timestamps: true }
 );
 
 const Order = models.Order || model("Order", OrderSchema);
 export default Order;
+

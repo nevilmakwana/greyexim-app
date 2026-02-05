@@ -3,14 +3,28 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useCart } from "@/context/CartContext";
+
 export default function OrderSuccessPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
+  const { clearCart } = useCart();
 
   useEffect(() => {
+    // Prefer URL orderId (Stripe success), fallback to last saved order.
+    const sp = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const fromUrl = sp?.get("orderId") || null;
+    if (fromUrl) {
+      localStorage.setItem("lastOrderId", fromUrl);
+      setOrderId(fromUrl);
+    }
+
     // Local storage ya URL params se last order ID nikal sakte hain
     const lastOrder = localStorage.getItem("lastOrderId");
-    if (lastOrder) setOrderId(lastOrder);
-  }, []);
+    if (!fromUrl && lastOrder) setOrderId(lastOrder);
+
+    // Clear cart after a successful checkout page flow lands here.
+    clearCart();
+  }, [clearCart]);
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-6 font-sans">

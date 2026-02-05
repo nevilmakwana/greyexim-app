@@ -4,7 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+
 import { useCart } from "@/context/CartContext";
+
+type Address = {
+  _id: string;
+  label?: string;
+  name?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  pincode?: string;
+  country?: string;
+  isDefault?: boolean;
+};
 
 type CartItem = {
   _id: string;
@@ -12,6 +25,7 @@ type CartItem = {
   designCode?: string;
   price?: number;
   quantity?: number;
+  image?: string;
   images?: string[];
 };
 
@@ -21,170 +35,281 @@ export default function CheckoutPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
-  const [prefilledFromProfile, setPrefilledFromProfile] = useState(false);
-  const [showAddressForm, setShowAddressForm] = useState(true);
-  const [didAutoCollapse, setDidAutoCollapse] = useState(false);
 
+  // Address book
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [showAddressPicker, setShowAddressPicker] = useState(false);
+
+  // Guest/new address form (also used to add a new saved address)
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
+    fullName: "",
     email: "",
+    phone: "",
     address: "",
     city: "",
-    zip: "",
-    phone: "",
+    pincode: "",
     country: "India",
   });
+
+  const [saveToAddressBook, setSaveToAddressBook] = useState(true);
+
+  // Delivery options
+  const [deliverySpeed, setDeliverySpeed] = useState<"standard" | "express">("standard");
+  const shippingAmount = useMemo(() => (deliverySpeed === "express" ? 199 : 0), [deliverySpeed]);
+  const taxAmount = useMemo(() => 0, []);
+  const discountAmount = useMemo(() => 0, []);
+  const subtotalAmount = useMemo(() => cartTotal, [cartTotal]);
+  const totalAmount = useMemo(() => Math.max(subtotalAmount + shippingAmount + taxAmount - discountAmount, 0), [subtotalAmount, shippingAmount, taxAmount, discountAmount]);
+
+  // Payment
+  const [paymentMethod, setPaymentMethod] = useState<"COD" | "STRIPE">("COD");
 
   const itemCount = useMemo(() => {
     return (cart as CartItem[]).reduce((sum, item) => sum + (item.quantity || 1), 0);
   }, [cart]);
 
-  const addressComplete = Boolean(
-    formData.firstName.trim() &&
-      formData.address.trim() &&
-      formData.city.trim() &&
-      formData.zip.trim() &&
-      formData.phone.trim()
-  );
-
-  const canPlaceOrder = Boolean(session?.user?.email) && cart.length > 0 && addressComplete && !loading;
-
-  const inputClass =
-    "w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white text-sm font-semibold text-gray-900 placeholder:text-gray-400 shadow-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10";
-  const labelClass =
-    "block text-[10px] font-black text-gray-500 uppercase tracking-[0.22em] mb-2 ml-1";
-
-  // Auth gate (checkout requires a session in this build)
+  // Prefill email from session
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login?callbackUrl=/checkout");
-      return;
-    }
     if (session?.user?.email) {
-      setFormData((prev) => ({ ...prev, email: session.user.email || "" }));
+      setFormData((p) => ({ ...p, email: p.email || session.user?.email || "" }));
     }
-  }, [status, session, router]);
+  }, [session?.user?.email]);
 
-  // Prefill from saved profile (fast checkout)
+  // Load address book for logged-in users
   useEffect(() => {
-    if (prefilledFromProfile) return;
-    if (status !== "authenticated" || !session?.user?.email) return;
+    if (status !== "authenticated") return;
 
     let cancelled = false;
-
     (async () => {
       try {
-        const res = await fetch("/api/user/account", { cache: "no-store" });
+        const res = await fetch("/api/user/addresses", { cache: "no-store" });
         if (!res.ok) return;
-
         const data = await res.json();
         if (cancelled) return;
 
-        setFormData((prev) => {
-          const fullName = typeof data?.name === "string" ? data.name.trim() : "";
-          const parts = fullName ? fullName.split(/\s+/) : [];
-          const firstFromName = parts[0] || "";
-          const lastFromName = parts.slice(1).join(" ");
+        const list: Address[] = Array.isArray(data?.addresses) ? data.addresses : [];
+        setAddresses(list);
 
-          return {
-            ...prev,
-            email: prev.email || session.user?.email || "",
-            firstName: prev.firstName || firstFromName,
-            lastName: prev.lastName || lastFromName,
-            address: prev.address || (data?.address ?? ""),
-            city: prev.city || (data?.city ?? ""),
-            zip: prev.zip || (data?.pincode ?? ""),
-            phone: prev.phone || (data?.phone ?? ""),
-            country: prev.country || (data?.country ?? "India"),
-          };
-        });
+        const def = list.find((a) => a.isDefault) || list[0];
+        if (def?._id) setSelectedAddressId(def._id);
 
-        setPrefilledFromProfile(true);
+        // Prefill form from default address if empty (helps when user chooses "New address" later)
+        if (def) {
+          setFormData((p) => ({
+            ...p,
+            fullName: p.fullName || def.name || "",
+            phone: p.phone || def.phone || "",
+            address: p.address || def.address || "",
+            city: p.city || def.city || "",
+            pincode: p.pincode || def.pincode || "",
+            country: p.country || def.country || "India",
+          }));
+        }
       } catch {
-        // If profile can't be loaded, user can still type manually.
+        // ignore
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [prefilledFromProfile, status, session?.user?.email]);
+  }, [status]);
 
-  // Auto-collapse address form if profile already has complete details (big brand feel)
+  // Handle Stripe cancel
   useEffect(() => {
-    if (didAutoCollapse) return;
-    if (!prefilledFromProfile) return;
-    if (!addressComplete) return;
-    setShowAddressForm(false);
-    setDidAutoCollapse(true);
-  }, [didAutoCollapse, prefilledFromProfile, addressComplete]);
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("canceled") === "1") {
+      // keep cart as-is; just surface a nudge
+      // eslint-disable-next-line no-alert
+      alert("Payment cancelled. You can try again or switch to Cash on Delivery.");
+    }
+  }, []);
 
-  const handlePlaceOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canPlaceOrder) return;
-    setLoading(true);
+  const selectedAddress = useMemo(() => {
+    return addresses.find((a) => a._id === selectedAddressId) || null;
+  }, [addresses, selectedAddressId]);
 
-    const orderData = {
-      user: session?.user?.email,
-      customerName: `${formData.firstName} ${formData.lastName}`.trim(),
-      email: formData.email,
-      phone: formData.phone,
-      address: formData.address,
-      city: formData.city,
-      pincode: formData.zip,
-      country: formData.country,
+  const addressFromSavedIsComplete = useMemo(() => {
+    if (!selectedAddress) return false;
+    return Boolean(
+      (selectedAddress.name || "").trim() &&
+        (selectedAddress.phone || "").trim() &&
+        (selectedAddress.address || "").trim() &&
+        (selectedAddress.city || "").trim() &&
+        (selectedAddress.pincode || "").trim()
+    );
+  }, [selectedAddress]);
+
+  const formAddressComplete = useMemo(() => {
+    return Boolean(
+      formData.fullName.trim() &&
+        formData.email.trim() &&
+        formData.phone.trim() &&
+        formData.address.trim() &&
+        formData.city.trim() &&
+        formData.pincode.trim()
+    );
+  }, [formData]);
+
+  const canPlaceOrder = useMemo(() => {
+    if (cart.length === 0) return false;
+    if (loading) return false;
+    if (status === "authenticated" && addressFromSavedIsComplete) return true;
+    return formAddressComplete;
+  }, [cart.length, loading, status, addressFromSavedIsComplete, formAddressComplete]);
+
+  const inputClass =
+    "w-full px-4 py-3 rounded-2xl border border-gray-200 bg-white text-sm font-semibold text-gray-900 placeholder:text-gray-400 shadow-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10";
+  const labelClass =
+    "block text-[10px] font-black text-gray-500 uppercase tracking-[0.22em] mb-2 ml-1";
+
+  const buildOrderPayload = (orderPaymentMethod: "COD" | "STRIPE", orderPaymentStatus: string) => {
+    const useSaved = status === "authenticated" && addressFromSavedIsComplete && selectedAddress;
+
+    const ship = useSaved
+      ? {
+          customerName: (selectedAddress?.name || "").trim(),
+          phone: (selectedAddress?.phone || "").trim(),
+          address: (selectedAddress?.address || "").trim(),
+          city: (selectedAddress?.city || "").trim(),
+          pincode: (selectedAddress?.pincode || "").trim(),
+          country: (selectedAddress?.country || "India").trim(),
+        }
+      : {
+          customerName: formData.fullName.trim(),
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          city: formData.city.trim(),
+          pincode: formData.pincode.trim(),
+          country: formData.country.trim() || "India",
+        };
+
+    const email = (formData.email || session?.user?.email || "").trim();
+
+    return {
+      user: session?.user?.email || "",
+      customerName: ship.customerName,
+      email,
+      phone: ship.phone,
+      address: ship.address,
+      city: ship.city,
+      pincode: ship.pincode,
+      country: ship.country,
       cartItems: (cart as CartItem[]).map((item) => ({
         product: item._id,
         designName: item.designName || "Unnamed Design",
         designCode: item.designCode || "N/A",
         price: Number(item.price) || 0,
         quantity: item.quantity || 1,
-        image: item.images?.[0] || "",
+        image: item.image || (Array.isArray(item.images) ? item.images[0] : "") || "",
       })),
-      totalAmount: cartTotal,
-      status: "Received",
-      paymentMethod: "COD",
+      subtotalAmount,
+      shippingAmount,
+      taxAmount,
+      discountAmount,
+      totalAmount,
+      currency: "INR",
+      paymentMethod: orderPaymentMethod,
+      paymentStatus: orderPaymentStatus,
+      paymentProvider: orderPaymentMethod === "STRIPE" ? "stripe" : "",
     };
+  };
+
+  const maybeSaveAddress = async () => {
+    if (status !== "authenticated") return;
+    if (!saveToAddressBook) return;
+    if (!formAddressComplete) return;
 
     try {
-      const res = await fetch("/api/orders", {
+      await fetch("/api/user/addresses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderData),
+        body: JSON.stringify({
+          label: "Home",
+          name: formData.fullName.trim(),
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          city: formData.city.trim(),
+          pincode: formData.pincode.trim(),
+          country: formData.country.trim() || "India",
+          isDefault: addresses.length === 0,
+        }),
       });
+    } catch {
+      // ignore
+    }
+  };
 
-      if (res.ok) {
-        clearCart();
-        router.push("/order-success");
+  const placeOrderCOD = async () => {
+    const payload = buildOrderPayload("COD", "unpaid");
+
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || "Order failed");
+
+    localStorage.setItem("lastOrderId", String(data.orderId || ""));
+    clearCart();
+    router.push("/order-success");
+  };
+
+  const payWithStripe = async () => {
+    // Create order first (pending), then create a Stripe session tied to the order.
+    const payload = buildOrderPayload("STRIPE", "pending");
+
+    const orderRes = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const orderData = await orderRes.json().catch(() => ({}));
+    if (!orderRes.ok) throw new Error(orderData?.message || "Order create failed");
+
+    const orderId = String(orderData.orderId || "");
+    localStorage.setItem("lastOrderId", orderId);
+
+    const sessRes = await fetch("/api/checkout/stripe-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId }),
+    });
+    const sess = await sessRes.json().catch(() => ({}));
+    if (!sessRes.ok || !sess?.url) throw new Error(sess?.message || "Stripe session failed");
+
+    // Redirect to Stripe hosted checkout
+    window.location.href = String(sess.url);
+  };
+
+  const handleConfirm = async () => {
+    if (!canPlaceOrder) return;
+    setLoading(true);
+    try {
+      await maybeSaveAddress();
+      if (paymentMethod === "COD") {
+        await placeOrderCOD();
       } else {
-        alert("Failed to place order. Please try again.");
+        await payWithStripe();
       }
-    } catch (error) {
-      console.error(error);
-      alert("Something went wrong.");
+    } catch (err: any) {
+      console.error(err);
+      // eslint-disable-next-line no-alert
+      alert(err?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
-  if (status === "loading") {
-    return (
-      <div className="p-20 text-center font-black uppercase italic animate-pulse">
-        Securing session...
-      </div>
-    );
-  }
-  if (status === "unauthenticated") return null;
-
   if (cart.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-white">
         <h2 className="text-4xl font-black text-black uppercase mb-4">Your bag is empty</h2>
-        <Link
-          href="/shop"
-          className="bg-black text-white px-8 py-3 rounded-full font-black uppercase text-xs tracking-widest"
-        >
+        <Link href="/shop" className="bg-black text-white px-8 py-3 rounded-full font-black uppercase text-xs tracking-widest">
           Explore collection
         </Link>
       </div>
@@ -196,15 +321,9 @@ export default function CheckoutPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-10">
         <div className="flex items-start justify-between gap-3 mb-6">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">
-              Secure checkout
-            </p>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-black">
-              Checkout
-            </h1>
-            <p className="mt-1 text-xs text-gray-500 font-semibold">
-              Fast order flow. Minimal steps. Easy to review.
-            </p>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Secure checkout</p>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-black">Checkout</h1>
+            <p className="mt-1 text-xs text-gray-500 font-semibold">Fast order flow. Minimal steps. Easy to review.</p>
           </div>
           <Link
             href="/cart"
@@ -215,282 +334,90 @@ export default function CheckoutPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10">
-          {/* SUMMARY (mobile first) */}
-          <aside className="order-1 lg:order-2 lg:col-span-5 lg:sticky lg:top-20 h-fit">
-            {/* Mobile accordion */}
-            <div className="lg:hidden rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-              <details className="group">
-                <summary className="list-none cursor-pointer px-5 py-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">
-                      Order summary
-                    </p>
-                    <p className="text-sm font-black text-black">
-                      {itemCount} item{itemCount === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">
-                      Total
-                    </p>
-                    <p className="text-lg font-black text-black">
-                      {"\u20B9"}
-                      {cartTotal}
-                    </p>
-                  </div>
-                </summary>
+          {/* LEFT: Steps */}
+          <section className="order-2 lg:order-1 lg:col-span-7 space-y-6">
+            {/* Step 1: Address */}
+            <div className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-5 py-4 flex items-start justify-between gap-3 border-b border-gray-100">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Step 1</p>
+                  <h2 className="text-lg font-black tracking-tight">Delivery details</h2>
+                  <p className="text-[11px] font-semibold text-gray-500">Choose saved address or enter a new one.</p>
+                </div>
+                {status === "authenticated" && addresses.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddressPicker(true)}
+                    className="shrink-0 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700"
+                  >
+                    Change
+                  </button>
+                ) : null}
+              </div>
 
-                <div className="px-5 pb-5 border-t border-gray-100">
-                  <div className="pt-4 space-y-4">
-                    {(cart as CartItem[]).map((item, index) => (
-                      <div key={item._id || index} className="flex items-center gap-4">
-                        <div className="w-14 h-16 rounded-2xl overflow-hidden bg-gray-100 border border-gray-200 shrink-0">
-                          {item.images?.[0] ? (
-                            <img
-                              src={item.images[0]}
-                              alt={item.designName || "Product"}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full grid place-items-center text-[9px] font-black uppercase text-gray-400">
-                              No image
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-black uppercase text-black truncate">
-                            {item.designName}
-                          </p>
-                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">
-                            {item.designCode}
-                          </p>
-                          <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">
-                            Qty: {item.quantity || 1}
-                          </p>
-                        </div>
-                        <p className="text-sm font-black text-black">
-                          {"\u20B9"}
-                          {item.price}
+              <div className="p-5">
+                {/* Saved address summary */}
+                {status === "authenticated" && selectedAddress && addressFromSavedIsComplete ? (
+                  <div className="rounded-3xl border border-gray-200 bg-gray-50 p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-gray-900 truncate">{selectedAddress.name}</p>
+                        <p className="text-[12px] font-semibold text-gray-600 mt-1">{selectedAddress.address}</p>
+                        <p className="text-[12px] font-semibold text-gray-600">
+                          {selectedAddress.city} · {selectedAddress.pincode}
                         </p>
+                        <p className="text-[12px] font-semibold text-gray-600">{selectedAddress.phone}</p>
                       </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-5 pt-4 border-t border-gray-100 space-y-2">
-                    <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-500">
-                      <span>Shipping</span>
-                      <span className="text-green-600">FREE</span>
-                    </div>
-                    <div className="flex justify-between items-end">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                        Total
-                      </span>
-                      <span className="text-2xl font-black tracking-tight text-black">
-                        {"\u20B9"}
-                        {cartTotal}
+                      <span className="shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-gray-700">
+                        Verified
                       </span>
                     </div>
-                  </div>
-                </div>
-              </details>
-            </div>
-
-            {/* Desktop summary */}
-            <div className="hidden lg:block rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b border-gray-100">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">
-                  Order summary
-                </p>
-                <div className="flex items-end justify-between mt-1">
-                  <p className="text-sm font-black text-black">
-                    {itemCount} item{itemCount === 1 ? "" : "s"}
-                  </p>
-                  <p className="text-2xl font-black tracking-tight text-black">
-                    {"\u20B9"}
-                    {cartTotal}
-                  </p>
-                </div>
-              </div>
-
-              <div className="px-6 py-5 space-y-5 max-h-[42vh] overflow-y-auto pr-2 custom-scrollbar">
-                {(cart as CartItem[]).map((item, index) => (
-                  <div key={item._id || index} className="flex items-center gap-4">
-                    <div className="w-16 h-20 rounded-2xl overflow-hidden bg-gray-100 border border-gray-200 shrink-0">
-                      {item.images?.[0] ? (
-                        <img
-                          src={item.images[0]}
-                          alt={item.designName || "Product"}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full grid place-items-center text-[9px] font-black uppercase text-gray-400">
-                          No image
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-black uppercase text-black truncate">
-                        {item.designName}
-                      </p>
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">
-                        {item.designCode}
-                      </p>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">
-                        Qty: {item.quantity || 1}
-                      </p>
-                    </div>
-                    <p className="text-sm font-black text-black">
-                      {"\u20B9"}
-                      {item.price}
+                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      Using saved address
                     </p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="px-6 py-5 border-t border-gray-100 space-y-3">
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-500">
-                  <span>Shipping</span>
-                  <span className="text-green-600">FREE</span>
-                </div>
-                <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                    Total
-                  </span>
-                  <span className="text-3xl font-black tracking-tight text-black">
-                    {"\u20B9"}
-                    {cartTotal}
-                  </span>
-                </div>
-                <div className="mt-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                    Next steps
-                  </p>
-                  <p className="text-[11px] font-semibold text-gray-700 mt-1 leading-relaxed">
-                    Your order moves through Fabric Sourcing and Digital Printing. Status updates are visible in your profile.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </aside>
-
-          {/* DETAILS */}
-          <div className="order-2 lg:order-1 lg:col-span-7 space-y-5">
-            <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-5">
-              {/* ADDRESS */}
-              <section className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">
-                      Step 1
-                    </p>
-                    <h2 className="text-sm font-black uppercase tracking-widest text-black">
-                      Delivery details
-                    </h2>
-                  </div>
-
-                  {!showAddressForm && addressComplete && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAddressForm(true)}
-                      className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition"
-                    >
-                      Change
-                    </button>
-                  )}
-                </div>
-
-                {!showAddressForm && addressComplete ? (
-                  <div className="px-5 sm:px-6 py-5">
-                    <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-black text-black truncate">
-                            {formData.firstName} {formData.lastName}
-                          </p>
-                          <p className="text-sm text-gray-700 font-semibold mt-2">
-                            {formData.address}
-                          </p>
-                          <p className="text-sm text-gray-700 font-semibold">
-                            {formData.city} {"\u2022"} {formData.zip}
-                          </p>
-                          <p className="text-sm text-gray-700 font-semibold mt-2">
-                            {formData.phone}
-                          </p>
-                          {prefilledFromProfile && (
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mt-3">
-                              Using saved profile details
-                            </p>
-                          )}
-                        </div>
-                        <div className="shrink-0 rounded-2xl bg-white border border-gray-200 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gray-700">
-                          Verified
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 ) : (
-                  <div className="px-5 sm:px-6 py-5 space-y-4">
-                    {prefilledFromProfile && (
-                      <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                          Saved profile found
-                        </p>
-                        <p className="text-[11px] font-semibold text-gray-700 mt-1">
-                          We pre-filled your details. Just confirm and place the order.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className={labelClass}>First name</label>
-                        <input
-                          required
-                          type="text"
-                          autoComplete="given-name"
-                          className={inputClass}
-                          value={formData.firstName}
-                          onChange={(e) =>
-                            setFormData({ ...formData, firstName: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Last name (optional)</label>
-                        <input
-                          type="text"
-                          autoComplete="family-name"
-                          className={inputClass}
-                          value={formData.lastName}
-                          onChange={(e) =>
-                            setFormData({ ...formData, lastName: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-
+                  <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
                     <div>
-                      <label className={labelClass}>Email</label>
+                      <label className={labelClass}>Full name</label>
                       <input
-                        readOnly
-                        type="email"
-                        autoComplete="email"
-                        className={`${inputClass} bg-gray-100 cursor-not-allowed opacity-70`}
-                        value={formData.email}
+                        className={inputClass}
+                        value={formData.fullName}
+                        onChange={(e) => setFormData((p) => ({ ...p, fullName: e.target.value }))}
+                        placeholder="Full name"
                       />
                     </div>
 
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Email</label>
+                        <input
+                          className={inputClass}
+                          value={formData.email}
+                          onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
+                          placeholder="Email address"
+                          inputMode="email"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Phone</label>
+                        <input
+                          className={inputClass}
+                          value={formData.phone}
+                          onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
+                          placeholder="Phone number"
+                          inputMode="tel"
+                        />
+                      </div>
+                    </div>
+
                     <div>
-                      <label className={labelClass}>Address</label>
+                      <label className={labelClass}>Complete delivery address</label>
                       <input
-                        required
-                        type="text"
-                        autoComplete="street-address"
                         className={inputClass}
                         value={formData.address}
-                        onChange={(e) =>
-                          setFormData({ ...formData, address: e.target.value })
-                        }
+                        onChange={(e) => setFormData((p) => ({ ...p, address: e.target.value }))}
+                        placeholder="House no, street, area"
                       />
                     </div>
 
@@ -498,133 +425,284 @@ export default function CheckoutPage() {
                       <div>
                         <label className={labelClass}>City</label>
                         <input
-                          required
-                          type="text"
-                          autoComplete="address-level2"
                           className={inputClass}
                           value={formData.city}
-                          onChange={(e) =>
-                            setFormData({ ...formData, city: e.target.value })
-                          }
+                          onChange={(e) => setFormData((p) => ({ ...p, city: e.target.value }))}
+                          placeholder="City"
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Pincode</label>
+                        <label className={labelClass}>Zip / Pincode</label>
                         <input
-                          required
-                          type="text"
-                          inputMode="numeric"
-                          autoComplete="postal-code"
                           className={inputClass}
-                          value={formData.zip}
-                          onChange={(e) =>
-                            setFormData({ ...formData, zip: e.target.value })
-                          }
+                          value={formData.pincode}
+                          onChange={(e) => setFormData((p) => ({ ...p, pincode: e.target.value }))}
+                          placeholder="Zip / pincode"
+                          inputMode="numeric"
                         />
                       </div>
                     </div>
 
+                    {status === "authenticated" ? (
+                      <label className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-widest text-gray-700">Save to address book</p>
+                          <p className="text-[10px] font-semibold text-gray-500">Next time checkout will be 1-tap.</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={saveToAddressBook}
+                          onChange={(e) => setSaveToAddressBook(e.target.checked)}
+                          className="h-5 w-5"
+                        />
+                      </label>
+                    ) : (
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-gray-700">Guest checkout</p>
+                        <p className="text-[10px] font-semibold text-gray-500">
+                          You can place the order without login. After order, you can create an account anytime.
+                        </p>
+                      </div>
+                    )}
+                  </form>
+                )}
+              </div>
+            </div>
+
+            {/* Step 2: Delivery */}
+            <div className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Step 2</p>
+                <h2 className="text-lg font-black tracking-tight">Delivery</h2>
+                <p className="text-[11px] font-semibold text-gray-500">Pick a speed. We’ll confirm ETA after address.</p>
+              </div>
+              <div className="p-5 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setDeliverySpeed("standard")}
+                  className={`w-full rounded-3xl border px-5 py-4 text-left transition ${
+                    deliverySpeed === "standard" ? "border-black bg-black text-white" : "border-gray-200 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
                     <div>
-                      <label className={labelClass}>Phone</label>
-                      <input
-                        required
-                        type="tel"
-                        inputMode="tel"
-                        autoComplete="tel"
-                        placeholder="+91..."
-                        className={inputClass}
-                        value={formData.phone}
-                        onChange={(e) =>
-                          setFormData({ ...formData, phone: e.target.value })
-                        }
-                      />
-                      <p className="mt-2 text-[11px] text-gray-500 font-semibold">
-                        We’ll send delivery updates on this number.
+                      <p className="text-sm font-black">Standard Delivery</p>
+                      <p className={`text-[11px] font-semibold ${deliverySpeed === "standard" ? "text-white/80" : "text-gray-500"}`}>
+                        3–7 days · Free
                       </p>
                     </div>
-
-                    <div className="flex items-center justify-end">
-                      <button
-                        type="button"
-                        disabled={!addressComplete}
-                        onClick={() => setShowAddressForm(false)}
-                        className="rounded-2xl bg-black text-white px-5 py-3 text-[10px] font-black uppercase tracking-widest disabled:bg-gray-200 disabled:text-gray-400 transition"
-                      >
-                        Continue
-                      </button>
-                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                      deliverySpeed === "standard" ? "bg-white text-black" : "bg-gray-100 text-gray-700"
+                    }`}>
+                      {deliverySpeed === "standard" ? "Selected" : "Choose"}
+                    </span>
                   </div>
-                )}
-              </section>
+                </button>
 
-              {/* PAYMENT */}
-              <section className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-5 sm:px-6 py-4 border-b border-gray-100">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">
-                    Step 2
-                  </p>
-                  <h2 className="text-sm font-black uppercase tracking-widest text-black">
-                    Payment
-                  </h2>
-                </div>
-                <div className="px-5 sm:px-6 py-5">
-                  <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setDeliverySpeed("express")}
+                  className={`w-full rounded-3xl border px-5 py-4 text-left transition ${
+                    deliverySpeed === "express" ? "border-black bg-black text-white" : "border-gray-200 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-black text-black">Cash on Delivery</p>
-                      <p className="text-[11px] font-semibold text-gray-600 mt-1">
+                      <p className="text-sm font-black">Express Delivery</p>
+                      <p className={`text-[11px] font-semibold ${deliverySpeed === "express" ? "text-white/80" : "text-gray-500"}`}>
+                        1–3 days · {"\u20B9"}199
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                      deliverySpeed === "express" ? "bg-white text-black" : "bg-gray-100 text-gray-700"
+                    }`}>
+                      {deliverySpeed === "express" ? "Selected" : "Choose"}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Step 3: Payment */}
+            <div className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Step 3</p>
+                <h2 className="text-lg font-black tracking-tight">Payment</h2>
+                <p className="text-[11px] font-semibold text-gray-500">Choose your payment method.</p>
+              </div>
+              <div className="p-5 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("COD")}
+                  className={`w-full rounded-3xl border px-5 py-4 text-left transition ${
+                    paymentMethod === "COD" ? "border-black bg-black text-white" : "border-gray-200 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black">Cash on Delivery</p>
+                      <p className={`text-[11px] font-semibold ${paymentMethod === "COD" ? "text-white/80" : "text-gray-500"}`}>
                         Pay when your order arrives.
                       </p>
                     </div>
-                    <span className="rounded-full bg-black text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-                      Selected
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                      paymentMethod === "COD" ? "bg-white text-black" : "bg-gray-100 text-gray-700"
+                    }`}>
+                      {paymentMethod === "COD" ? "Selected" : "Choose"}
                     </span>
                   </div>
-                </div>
-              </section>
-
-              {/* DESKTOP CTA */}
-              <div className="hidden md:block">
-                <button
-                  type="submit"
-                  disabled={!canPlaceOrder}
-                  className="w-full rounded-3xl bg-black text-white py-5 font-black uppercase tracking-widest text-sm shadow-xl hover:bg-gray-900 transition disabled:bg-gray-300 disabled:text-gray-600"
-                >
-                  {loading
-                    ? "Placing order..."
-                    : `Confirm order \u2022 \u20B9${cartTotal}`}
                 </button>
-                <p className="mt-3 text-[11px] text-gray-500 font-semibold leading-relaxed">
-                  By placing this order, you confirm that the delivery details are correct.
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("STRIPE")}
+                  className={`w-full rounded-3xl border px-5 py-4 text-left transition ${
+                    paymentMethod === "STRIPE" ? "border-black bg-black text-white" : "border-gray-200 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black">Card / Apple Pay / Google Pay</p>
+                      <p className={`text-[11px] font-semibold ${paymentMethod === "STRIPE" ? "text-white/80" : "text-gray-500"}`}>
+                        Secure payment powered by Stripe (global).
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                      paymentMethod === "STRIPE" ? "bg-white text-black" : "bg-gray-100 text-gray-700"
+                    }`}>
+                      {paymentMethod === "STRIPE" ? "Selected" : "Choose"}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* RIGHT: Summary */}
+          <aside className="order-1 lg:order-2 lg:col-span-5 lg:sticky lg:top-20 h-fit">
+            <div className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Order summary</p>
+                  <p className="text-sm font-black text-black">
+                    {itemCount} item{itemCount === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Total</p>
+                  <p className="text-lg font-black text-black">
+                    {"\u20B9"}
+                    {totalAmount}
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-5 py-5 space-y-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 font-semibold">Subtotal</span>
+                    <span className="font-black">
+                      {"\u20B9"}
+                      {subtotalAmount}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 font-semibold">Shipping</span>
+                    <span className="font-black">{shippingAmount === 0 ? "Free" : `\u20B9${shippingAmount}`}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 font-semibold">Tax</span>
+                    <span className="font-black">{taxAmount === 0 ? "Included" : `\u20B9${taxAmount}`}</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100">
+                  <button
+                    type="button"
+                    disabled={!canPlaceOrder}
+                    onClick={handleConfirm}
+                    className={`w-full rounded-full py-4 font-black uppercase text-xs tracking-widest shadow-lg transition active:scale-95 ${
+                      canPlaceOrder
+                        ? "bg-black text-white hover:bg-gray-900"
+                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    }`}
+                  >
+                    {loading ? "Processing..." : paymentMethod === "STRIPE" ? "Pay Securely" : "Confirm Order"}
+                  </button>
+
+                  <p className="mt-3 text-[10px] font-semibold text-gray-500 text-center">
+                    By placing your order, you agree to our terms. Payments are encrypted.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      {/* Address Picker Modal */}
+      {showAddressPicker ? (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddressPicker(false)} />
+          <div className="absolute left-0 right-0 bottom-0 mx-auto max-w-xl rounded-t-[32px] bg-white shadow-2xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-black uppercase tracking-widest">Choose address</p>
+              <button
+                type="button"
+                onClick={() => setShowAddressPicker(false)}
+                className="w-10 h-10 grid place-items-center rounded-full border border-gray-200"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3 max-h-[55vh] overflow-auto pb-2">
+              {addresses.map((a) => (
+                <button
+                  type="button"
+                  key={a._id}
+                  onClick={() => {
+                    setSelectedAddressId(a._id);
+                    setShowAddressPicker(false);
+                  }}
+                  className={`w-full text-left rounded-3xl border px-4 py-4 transition ${
+                    a._id === selectedAddressId ? "border-black bg-black text-white" : "border-gray-200 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-black truncate">{a.name || "Saved address"}</p>
+                      <p className={`text-[11px] font-semibold mt-1 ${a._id === selectedAddressId ? "text-white/80" : "text-gray-600"}`}>
+                        {(a.address || "").trim()}
+                      </p>
+                      <p className={`text-[11px] font-semibold ${a._id === selectedAddressId ? "text-white/80" : "text-gray-600"}`}>
+                        {(a.city || "").trim()} · {(a.pincode || "").trim()} · {(a.country || "India").trim()}
+                      </p>
+                      <p className={`text-[11px] font-semibold ${a._id === selectedAddressId ? "text-white/80" : "text-gray-600"}`}>
+                        {(a.phone || "").trim()}
+                      </p>
+                    </div>
+                    {a.isDefault ? (
+                      <span className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                        a._id === selectedAddressId ? "bg-white text-black" : "bg-gray-100 text-gray-700"
+                      }`}>
+                        Default
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+
+              <div className="rounded-3xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4">
+                <p className="text-[11px] font-black uppercase tracking-widest text-gray-700">Want to deliver to a new address?</p>
+                <p className="text-[10px] font-semibold text-gray-500 mt-1">
+                  Close this sheet and type a new address in the form (Step 1).
                 </p>
               </div>
-            </form>
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* MOBILE STICKY CTA (kept above bottom nav) */}
-      <div className="md:hidden fixed left-4 right-4 bottom-24 z-[999999]">
-        <div className="rounded-3xl border border-gray-200 bg-white/95 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] px-4 py-3 flex items-center gap-4">
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-              Total
-            </p>
-            <p className="text-xl font-black tracking-tight text-black truncate">
-              {"\u20B9"}
-              {cartTotal}
-            </p>
-          </div>
-          <button
-            form="checkout-form"
-            type="submit"
-            disabled={!canPlaceOrder}
-            className="rounded-2xl bg-black text-white px-5 py-3 text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition disabled:bg-gray-300 disabled:text-gray-600"
-          >
-            {loading ? "Placing..." : "Confirm"}
-          </button>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 }
-
