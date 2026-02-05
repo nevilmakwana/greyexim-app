@@ -11,6 +11,7 @@ export default function CheckoutPage() {
   const { data: session, status } = useSession(); 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [prefilledFromProfile, setPrefilledFromProfile] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -32,6 +33,51 @@ export default function CheckoutPage() {
       setFormData((prev) => ({ ...prev, email: session.user?.email || "" }));
     }
   }, [status, session, router]);
+
+  // Prefill checkout fields from the user's saved profile (if available).
+  useEffect(() => {
+    if (prefilledFromProfile) return;
+    if (status !== "authenticated" || !session?.user?.email) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/user/account", { cache: "no-store" });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (cancelled) return;
+
+        setFormData((prev) => {
+          const fullName = typeof data?.name === "string" ? data.name.trim() : "";
+          const parts = fullName ? fullName.split(/\s+/) : [];
+          const firstFromName = parts[0] || "";
+          const lastFromName = parts.slice(1).join(" ");
+
+          return {
+            ...prev,
+            email: prev.email || session.user?.email || "",
+            firstName: prev.firstName || firstFromName,
+            lastName: prev.lastName || lastFromName,
+            address: prev.address || (data?.address ?? ""),
+            city: prev.city || (data?.city ?? ""),
+            zip: prev.zip || (data?.pincode ?? ""),
+            phone: prev.phone || (data?.phone ?? ""),
+            country: prev.country || (data?.country ?? "India"),
+          };
+        });
+
+        setPrefilledFromProfile(true);
+      } catch {
+        // If profile can't be loaded, user can still type manually.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prefilledFromProfile, status, session?.user?.email]);
 
   // 2. Form Submission (Connects to your Admin Orders Page)
   const handlePlaceOrder = async (e: React.FormEvent) => {
